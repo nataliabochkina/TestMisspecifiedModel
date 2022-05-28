@@ -1,0 +1,236 @@
+
+# Functions for testing hypothesis D=V
+
+EVBasedstat <- function(D, V, p,n)
+{
+
+ c = p/n
+ 
+ Sn = solve(D) %*% V  
+ ev = eigen(Sn)$values
+
+ Tn = (sum(ev) - sum(log(ev)) - p*(2 + (n/p-1)*log(1 - p/n)) +0.5*log(1-p/n))/(sqrt(-2*log(1-c)-2*c))
+ pv = 2*pnorm(-abs(Tn))
+
+ TnL = sum(ev) - sum(log(ev)) - p
+ pvL =  1-pchisq(TnL,p) 
+
+ TnL1 = sum(1/ev) + sum(log(ev)) - p
+ pvL1 =  1-pchisq(TnL1,p) 
+
+ TnEvLog2 = mean((log(ev))^2)
+ TnEvSqrt2 = mean((sqrt(ev)- 1/sqrt(ev))^2)
+ 
+ return(list(Tn=Tn, pvalue = pv, TnL = TnL, pvL=pvL, TnL1 = TnL1, pvL1=pvL1, TnEvLog2= TnEvLog2, TnEvSqrt2=TnEvSqrt2) )
+ 
+}
+
+
+LikBasedstat <- function(Drootinv, V, p,n)
+{
+
+ c = p/n
+ 
+ Sn = Drootinv %*% V %*% Drootinv
+
+ Tn = (TraceMatrix(Sn) - log(det(Sn)) - p*(2 + (n/p-1)*log(1 - p/n)) +0.5*log(1-p/n))/(sqrt(-2*log(1-c)-2*c))
+ pv = 2*pnorm(-abs(Tn))
+
+ TnL = TraceMatrix(Sn) - p - log(det(Sn))
+ pvL =  1-pchisq(TnL,p) 
+
+ TnL1 = TraceMatrix(solve(Sn)) - p + log(det(Sn))
+ pvL1 =  1-pchisq(TnL1,p) 
+
+ ev = eigen(Sn)$values
+
+ TnEvLog2 = mean((log(ev))^2)
+ TnEvSqrt2 = mean((sqrt(ev)- 1/sqrt(ev))^2)
+ 
+ return(list(Tn=Tn, pvalue = pv, TnL = TnL, pvL=pvL, TnL1 = TnL1, pvL1=pvL1, TnEvLog2= TnEvLog2, TnEvSqrt2=TnEvSqrt2) )
+ 
+}
+
+
+LikBasedstat2 <- function(Sn, p,n)
+{
+
+ c = p/n
+ 
+# Sn = Drootinv %*% V %*% Drootinv
+
+ Tn = (TraceMatrix(Sn) - log(det(Sn)) - p*(2 + (n/p-1)*log(1 - p/n)) +0.5*log(1-p/n))/(sqrt(-2*log(1-c)-2*c))
+ pv = 2*pnorm(-abs(Tn))
+
+ TnL = TraceMatrix(Sn) - p - log(det(Sn))
+ pvL =  1-pchisq(TnL,p) 
+ 
+ return(list(Tn=Tn, pvalue = pv, TnL = TnL, pvL=pvL) )
+ 
+}
+
+# symmetric matrix
+
+SqrtInvMatrix <- function(x)
+{
+  xe = eigen(x, symmetric=T)
+
+  x.SqrtInv = xe$vectors %*% diag(1/sqrt(xe$values)) %*% t(xe$vectors)
+  
+  x.SqrtInv
+}
+
+TraceMatrix <- function(x)
+{
+  p = dim(x)[1]
+  trace1 = 0
+
+  for(i in 1:p)
+   trace1 = trace1+ x[i,i]
+
+  return(trace1)
+}
+
+#==============================
+# function, multinomial data analysis 
+
+MultMisspecCheck <- function(ns, n)
+{
+
+ p = dim(ns)[1]
+ N = dim(ns)[2]
+
+# analyse data 
+
+n.mean = rep(NA, p)
+n.cov = array(dim = c(p,p) ) 
+
+for(j in 1:p)
+{
+   n.mean[j] = mean(ns[j,])
+   n.cov[j,j] = var(ns[j,])      
+}
+for(j in 1:(p-1))
+ for(k in (j+1):p)
+  {
+   n.cov[j,k] = cov(ns[j,], ns[k,])      
+   n.cov[k,j] = n.cov[j,k] 
+  }
+
+theta.hat = n.mean /n
+
+D = array(dim = c(p-1,p-1) ) 
+V = array(dim = c(p-1,p-1) ) 
+
+for(j in 1:(p-1))
+{
+ D[j,j] = n/(theta.hat[j])+ n/(theta.hat[p])
+ V[j,j] = n.cov[j,j]/((theta.hat[j])^2) +n.cov[p,p]/((theta.hat[p])^2) - 2*n.cov[j,p]/(theta.hat[j]*theta.hat[p])
+}
+for(j in 1:(p-2))
+ for(m in (j+1):(p-1))
+  {
+   D[j,m] = n/theta.hat[p]
+   D[m,j] = D[j,m] 
+
+   V[j,m] = n.cov[j,m]/(theta.hat[j]*theta.hat[m])+n.cov[p,p]/theta.hat[p]^2 - n.cov[j,p]/(theta.hat[j]*theta.hat[p]) - n.cov[m,p]/(theta.hat[m]*theta.hat[p])
+   V[m,j] =V[j,m] 
+  }
+
+  D = D/n
+  V = V/n
+
+ tp = LikBasedstat(SqrtInvMatrix(D), V, p-1,n)
+
+ return(tp)
+}
+
+# ======================================
+# different n 
+
+# function, multinomial data analysis 
+
+MultMisspecCheckDiffN <- function(ns, nj)
+{
+
+ p = dim(ns)[1]
+ N = dim(ns)[2]
+
+# analyse data 
+
+n.mean = rep(NA, p)
+n.cov = array(dim = c(p,p) ) 
+
+for(j in 1:p)
+{
+   n.mean[j] = mean(ns[j,]/nj)
+}
+theta.hat = n.mean 
+
+for(j in 1:p)
+   n.cov[j,j] = sum( (ns[j,]/(theta.hat[j])-nj)^2)
+
+
+for(j in 1:(p-1))
+ for(k in (j+1):p)
+  {
+   n.cov[j,k] = sum( (ns[j,]/(theta.hat[j]) -nj)* (ns[k,]/(theta.hat[k]) -nj))
+   n.cov[k,j] = n.cov[j,k] 
+  }
+
+D = array(dim = c(p-1,p-1) ) 
+V = array(dim = c(p-1,p-1) ) 
+
+for(j in 1:(p-1))
+{
+ D[j,j] = sum(nj)/(theta.hat[j]) + sum(nj)/(theta.hat[p])
+# D[j,j] = sum(nj)/(theta.hat[j]) + sum(nj)/(theta.hat[p])
+ V[j,j] = (n.cov[j,j] +  n.cov[p,p]  - 2*n.cov[j,p] )
+}
+for(j in 1:(p-2))
+ for(m in (j+1):(p-1))
+  {
+   D[j,m] = sum(nj)/(theta.hat[p])
+   D[m,j] = D[j,m] 
+
+   V[j,m] = (n.cov[j,m] +n.cov[p,p]  - n.cov[j,p]  - n.cov[m,p])
+   V[m,j] =V[j,m] 
+  }
+
+# true V and D:
+
+#D.true = array(dim = c(p-1,p-1) ) 
+#for(j in 1:(p-1))
+# D.true[j,j] = sum(nj)/(theta.true[j]) + sum(nj)/(theta.true[p])
+
+#for(j in 1:(p-2))
+# for(m in (j+1):(p-1))
+#  {
+#   D.true[j,m] = sum(nj)/(theta.true[p])
+#   D.true[m,j] = D[j,m] 
+#}
+
+ D = D/mean(nj)
+ V = V/mean(nj)
+
+# tp = LikBasedstat(SqrtInvMatrix(D), V, p-1, sum(nj))
+ tp = EVBasedstat(D, V, p-1, sum(nj))
+ return(tp)
+}
+
+# =============================
+
+#  
+# pval using observed 
+
+Empirical.pval <- function(x, x0)
+{
+ pval = rep(NA, length(x))
+
+ for(i in 1:length(x))
+  pval[i] = mean(as.numeric(x0 > x[i]))
+
+ pval
+}
+
+#pv = Empirical.pval(rnorm(1000), rnorm(100))

@@ -1,0 +1,333 @@
+
+source("TestingFunctions.txt")
+
+# =====================================
+# Check multinomial data on simulation
+
+p = 10
+n = 500
+
+# simulate data 
+
+theta.true0 = rexp(p, 2)+0.2
+theta.true = theta.true0/sum(theta.true0)
+
+theta.true
+
+[1] 0.09763966 0.13893394 0.07148201 0.07872365 0.07362166 0.05979057
+ [7] 0.18796254 0.09385762 0.09063485 0.10735351
+
+#===================================================
+# correct model, null distribution 
+#-----------------------------------
+# repeat simulation 1000 times 
+
+# use 11 repeated samples to estimate mean and var of n, and all of them for inference
+
+M = 1000
+
+ N=11
+ ns = rmultinom(N, n, theta.true) 
+ tpp = MultMisspecCheckDiffN(ns, rep(n,N))
+
+inference = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+
+for( w in 1:M)
+{
+
+# simulate 11 data sets
+
+ N=11
+ ns = rmultinom(N, n, theta.true) 
+
+# tpp = MultMisspecCheck(ns, n)
+ tpp = MultMisspecCheckDiffN(ns, rep(n,N))
+  inference[,w] = unlist(tpp)
+
+}
+
+# use inference as a null distribution
+
+
+inference0 = inference 
+
+#=======================
+# repeat the simulation 
+# compare two performances under the null 
+
+inference = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+
+for( w in 1:M)
+{
+
+# simulate 11 data sets
+
+ N=11
+ ns = rmultinom(N, n, theta.true) 
+
+# tpp = MultMisspecCheck(ns, n)
+ tpp = MultMisspecCheckDiffN(ns, rep(n,N))
+  inference[,w] = unlist(tpp)
+
+}
+
+#  ==========================================================
+# plots
+
+inference.names = dimnames(inference)[[1]]
+
+
+for(k in 3:length(inference.names))
+{
+pdf(file=paste("MultinomSimNullreproduce", inference.names[k], ".pdf", sep=""))
+plot(sort(inference[k,]), sort(inference0[k,]), xlab=paste(inference.names[k], "1"), ylab=paste(inference.names[k], "2"))
+abline(c(0,1))
+dev.off()
+}
+
+for(k in 3:length(inference.names))
+{
+pdf(file=paste("MultinomSimNullreproduce", inference.names[k], "Log.pdf", sep=""))
+plot(log(sort(inference[k,])), log(sort(inference0[k,])), xlab=paste("Log", inference.names[k], "1"), ylab=paste("Log", inference.names[k], "2"))
+abline(c(0,1))
+dev.off()
+}
+
+
+# =========================================
+# 2. slightly incorrect distribution. 
+
+# e.g. some words go together, so not independent 
+
+# n_3 and n_4 are correlated, - count together 
+# n_7 and n_8 are correlated, - count together 
+
+# n[3] = (0.5+ a) n[3] + (0.5-a) n[4]
+# n[4] = (0.5- a) n[3] + (0.5+a) n[4]
+# n[7] = (0.5+ b) n[7] + (0.5-b) n[8]
+# n[8] = (0.5- b) n[7] + (0.5+b) n[8]
+
+a = 0.2
+b = 0.1
+
+# repeat M=1000 times 
+
+M = 1000
+
+inferenceMiss = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+ 
+for( w in 1:M)
+{
+
+ ns0 = rmultinom(N, n, theta.true)
+
+ ns1 = ns0
+ ns1[3,] = (0.5+ a) *ns0[3,] + (0.5-a) *ns0[4,]
+ ns1[4,] = (0.5- a) *ns0[3,] + (0.5+a) *ns0[4,]
+ ns1[7,] = (0.5+ b)* ns0[7,] + (0.5-b) *ns0[8,]
+ ns1[8,] = (0.5- b)* ns0[7,] + (0.5+b) *ns0[8,]
+
+# tpp = MultMisspecCheck(ns1, n)
+#  inferenceMiss[,w] = c(tpp[[1]], tpp[[2]], tpp[[3]], tpp[[4]])
+ tpp = MultMisspecCheckDiffN(ns1, rep(n,N))
+  inferenceMiss[,w] = unlist(tpp)
+ 
+}
+
+hist(inferenceMiss[3,])
+
+pvalsMiss = array(dim=c(length(names(tpp)), M))
+for(k in 3:length(names(tpp)))
+ pvalsMiss[k,] = Empirical.pval(inferenceMiss[k,], inference[k,])
+
+plot(sort(inferenceMiss[k,]), sort(inference[k,]))
+
+hist(pvalsMiss[k,])
+
+inference.names1 = c("", "", "KL", "", "","", "Geo", "Sqrt")
+
+for(k in c(3,7,8))
+{
+pdf(file=paste("MultinomSimDataSet1", inference.names1[k], ".pdf", sep=""))
+ppp =2*pmin(pvalsMiss[k,],1-pvalsMiss[k,]) 
+hist(ppp, xlab= "Two-sided p-values", main = paste("Data set 1", inference.names1[k]))
+dev.off()
+}
+
+
+#=======================
+# 3. another deviation 
+# contamination by Poisson distribution
+
+# repeat 1000 times 
+
+M = 1000
+
+inferenceMiss2 = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+
+lam = 200
+
+for( w in 1:M)
+{
+
+ ns2 = array(dim=c(p,N))
+ nj=rep(NA,N)
+
+ ns2 = rmultinom(N, n, theta.true)  
+ for(m in 1:N)
+ for(j in 1:p)
+ {
+  ns2[j,m] = ns2[j,m] + rpois(1,lam)
+ }
+
+ for(j in 1:N)
+  nj[j]= sum(ns2[,j])
+
+  tpp = MultMisspecCheckDiffN(ns2, nj)
+  inferenceMiss2[,w] = unlist(tpp)
+ 
+}
+
+hist(inferenceMiss2[3,])
+
+
+pvalsMiss2 = array(dim=c(length(names(tpp)), M))
+for(k in 3:length(names(tpp)))
+ pvalsMiss2[k,] = Empirical.pval(inferenceMiss2[k,], inference[k,])
+
+for(k in c(3,7,8))
+{
+pdf(file=paste("MultinomSimDataSet2-Lam",lam, inference.names1[k], ".pdf", sep=""))
+ppp =2*pmin(pvalsMiss2[k,],1-pvalsMiss2[k,]) 
+hist(ppp, xlab= "Two-sided p-values", main = paste("Data set 2", inference.names1[k]))
+
+dev.off()
+}
+
+# done lam = 10, 50, 100, 200
+
+
+
+#=====================================
+# 4. Poisson distribution
+
+inferenceMissPfull = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+
+for( w in 1:M)
+{
+
+ ns2 = array(dim=c(p,N))
+ nj=rep(NA,N)
+
+ ns2 = rmultinom(N, n, theta.true)  
+ for(j in 1:p)
+ {
+  ns2[j,] = rpois(N,n*theta.true[j])
+ }
+
+ for(j in 1:N)
+  nj[j]= sum(ns2[,j])
+
+  tpp = MultMisspecCheckDiffN(ns2, nj)
+  inferenceMissPfull[,w] = unlist(tpp)
+ 
+}
+
+hist(inferenceMissPfull[3,])
+
+pvalsMissPfull = array(dim=c(length(names(tpp)), M))
+for(k in 3:length(names(tpp)))
+ pvalsMissPfull[k,] = Empirical.pval(inferenceMissPfull[k,], inference[k,])
+
+hist(pvalsMissPfull[k,])
+
+#=====================================
+# 5. Very different 
+
+inferenceMissPfull = array(dim=c(length(names(tpp)), M), dimnames = list(names(tpp) ,NULL))
+
+for( w in 1:M)
+{
+
+ ns2 = array(dim=c(p,N))
+ nj=rep(NA,N)
+
+ for(j in 1:p)
+ {
+  ns2[j,] = round(rexp(N, 0.08))
+ }
+
+ for(j in 1:N)
+  nj[j]= sum(ns2[,j])
+
+  tpp = MultMisspecCheckDiffN(ns2, nj)
+  inferenceMissPfull[,w] = unlist(tpp)
+ 
+}
+
+hist(inferenceMissPfull[3,])
+
+pvalsMissPfull = array(dim=c(length(names(tpp)), M))
+for(k in 3:length(names(tpp)))
+ pvalsMissPfull[k,] = Empirical.pval(inferenceMissPfull[k,], inference[k,])
+
+for(k in c(3,7,8))
+{
+pdf(file=paste("MultinomSimDataSet3",  inference.names1[k], ".pdf", sep=""))
+ppp =2*pmin(pvalsMissPfull[k,],1-pvalsMissPfull[k,]) 
+hist(ppp, xlab= "Two-sided p-values", main = paste("Data set 3", inference.names1[k]))
+
+dev.off()
+}
+
+
+hist(pvalsMissPfull[k,])
+
+# rejected 
+# ----------------------------------------
+# plots 
+
+#   ns2[j,] = rpois(N,n*theta.true[j]) - D- neg def 
+#   ns2[j,] = rpois(N,10) - D- neg def 
+#  ns2[j,m] = ns2[j,m] + rpois(1,3)
+# n_{ij}~Pois(10) - matrix D is not positive definite 
+
+plot(log(sort(inference[6,])), log(sort(inference0[6,])))
+
+# 3,7,8
+plot(log(sort(inference[6,])), log(sort(inference0[6,])))
+
+k=3
+multnull.pval3 = Empirical.pval(inference[k,], inference0[k,]) 
+
+pdf(file="SimMultNull-KLPvaluesOneSided.pdf")
+hist(multnull.pval3, xlab = "One-sided p-values", main = "Multinomial null, KL")
+dev.off()
+
+pdf(file="SimMultNull-KLPvaluesTwoSided.pdf")
+hist(2*pmin(multnull.pval3, 1-multnull.pval3), xlab = "Two-sided p-values", main = "Multinomial null, KL")
+dev.off()
+
+k=7
+multnull.pval7 = Empirical.pval(inference[k,], inference0[k,]) 
+
+pdf(file="SimMultNull-GeoPvaluesOneSided.pdf")
+hist(multnull.pval7, xlab = "One-sided p-values", main = "Multinomial null, Geo")
+dev.off()
+
+pdf(file="SimMultNull-GeoPvaluesTwoSided.pdf")
+hist(2*pmin(multnull.pval7, 1-multnull.pval7), xlab = "Two-sided p-values", main = "Multinomial null, Geo")
+dev.off()
+
+k=8
+multnull.pval8 = Empirical.pval(inference[k,], inference0[k,]) 
+
+pdf(file="SimMultNull-SqrtPvaluesOneSided.pdf")
+hist(multnull.pval8, xlab = "One-sided p-values", main = "Multinomial null, Sqrt")
+dev.off()
+
+pdf(file="SimMultNull-SqrtPvaluesTwoSided.pdf")
+hist(2*pmin(multnull.pval8, 1-multnull.pval8), xlab = "Two-sided p-values", main = "Multinomial null, Sqrt")
+dev.off()
+
+# ====================================
